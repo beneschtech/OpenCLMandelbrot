@@ -6,6 +6,7 @@ extern double left;
 extern double top;
 extern double fwidth;
 extern double fheight;
+extern unsigned int iterations;
 
 CPUFractalComputeThread::CPUFractalComputeThread(int idx, int tot, int w, int h, uchar *img): QRunnable()
 {
@@ -28,8 +29,8 @@ void CPUFractalComputeThread::run()
             double xc = left + (xinc * x);
             double yc = top + (yinc * y);
             double xt = 0,yt = 0,xtt,ytt;
-            int i;
-            for (i = 0; i < 1024; i++)
+            unsigned int i;
+            for (i = 0; i < iterations; i++)
             {
                 xtt = xt*xt - yt*yt + xc;
                 ytt = 2*xt*yt + yc;
@@ -37,7 +38,7 @@ void CPUFractalComputeThread::run()
                 if (xt * xt * yt * yt > 16)
                     break;
             }
-            i = i % 255;
+            i = i % 256;
             myImgData[(y*(myWidth)) + x] = i;
         }
     }

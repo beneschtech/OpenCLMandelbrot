@@ -3,6 +3,7 @@
 #include <QImage>
 #include <iostream>
 #include <QMessageBox>
+#include <sys/time.h>
 
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
@@ -13,6 +14,7 @@ double left = -2.5;
 double top = -1.5;
 double fwidth = 3.5;
 double fheight = 3.0;
+unsigned int iterations = 1024;
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -75,15 +77,11 @@ MainWindow::~MainWindow()
 
 void MainWindow::wheelEvent(QWheelEvent *ev)
 {
-    Qt::MouseButton btn;
-    if (ev->angleDelta().y() > 0)
-    {
-        btn = Qt::LeftButton;
-    } else {
-        btn = Qt::RightButton;
-    }
-    QMouseEvent mev(QEvent::MouseButtonPress,ev->pos(),btn,0,0);
-    mousePressEvent(&mev);
+    iterations += ev->angleDelta().y();
+    if (ui->cpuPB->isChecked())
+        cpuCompute();
+    if (ui->gpuPB->isChecked())
+        gpuCompute();
 }
 
 void MainWindow::mousePressEvent(QMouseEvent *ev)
@@ -112,30 +110,48 @@ void MainWindow::mousePressEvent(QMouseEvent *ev)
         gpuCompute();
 }
 
+double MainWindow::currentTime()
+{
+    struct timeval t;
+    gettimeofday(&t,NULL);
+    double rv = t.tv_sec;
+    rv += (t.tv_usec / 1000000.0);
+    return rv;
+}
+
 void MainWindow::cpuCompute()
 {
     ui->cpuPB->setChecked(true);
     ui->gpuPB->setChecked(false);
     int fw = ui->fracImg->frameWidth();
-    qint64 start = QDateTime::currentDateTime().toMSecsSinceEpoch();
+    double start = currentTime();
     QSize sz = ui->fracImg->size() - QSize(fw*2,fw*2);
     uchar *imgData = (uchar *)malloc(sz.width() * sz.height());
     int w = sz.width();
     int h = sz.height();
-    int nThreads = QThreadPool::globalInstance()->maxThreadCount()-1;
+    int nThreads = QThreadPool::globalInstance()->maxThreadCount();
     for (int i = 0; i < nThreads; i++)
         QThreadPool::globalInstance()->start(new CPUFractalComputeThread(i,nThreads,w,h,imgData));
-    while (QThreadPool::globalInstance()->activeThreadCount() > 1)
+    while (QThreadPool::globalInstance()->activeThreadCount())
         qApp->processEvents();
 
-    double ctime = QDateTime::currentDateTime().toMSecsSinceEpoch() - start;
-    ctime /= 1000;
+    double ctime = currentTime() - start;
+
     QImage px(imgData,w,h,w,QImage::Format_Indexed8);
-    for (int i = 0; i < 255; i++)
+    px.setColor(0,qRgb(0,0,0));
+    for (int i = 1; i < 255; i++)
         px.setColor(i,qRgb(i,i,255-i));
 
     ui->fracImg->setPixmap(QPixmap::fromImage(px));
-    statusBar()->showMessage(QString("%1 seconds compute time").arg(ctime));
+    if (ctime > 0.75)
+    {
+        statusBar()->showMessage(QString("%1 seconds compute time").arg(ctime));
+    } else if (ctime > 0.01)
+    {
+        statusBar()->showMessage(QString("%1 ms compute time").arg(ctime * 1000.0));
+    } else {
+        statusBar()->showMessage(QString("%1 us compute time").arg(ctime * 1000000.0));
+    }
     ui->fracImg->repaint();
 }
 
@@ -144,7 +160,7 @@ void MainWindow::gpuCompute()
     ui->cpuPB->setChecked(false);
     ui->gpuPB->setChecked(true);
     int fw = ui->fracImg->frameWidth();
-    qint64 start = QDateTime::currentDateTime().toMSecsSinceEpoch();
+    double start = currentTime();
     QSize sz = ui->fracImg->size() - QSize(fw*2,fw*2);
     int w = sz.width();
     int h = sz.height();
@@ -160,20 +176,30 @@ void MainWindow::gpuCompute()
     clSetKernelArg(gpuKernel,0,sizeof(cl_mem),(void *)&gParms);
     clSetKernelArg(gpuKernel,1,sizeof(int),(void *)&w);
     clSetKernelArg(gpuKernel,2,sizeof(int),(void *)&h);
-    clSetKernelArg(gpuKernel,3,sizeof(cl_mem),(void *)&imgData);
+    clSetKernelArg(gpuKernel,3,sizeof(int),(void *)&iterations);
+    clSetKernelArg(gpuKernel,4,sizeof(cl_mem),(void *)&imgData);
     ret = clEnqueueNDRangeKernel(gpuCmdQueue,gpuKernel,1,NULL,&imgSz,NULL,0,NULL,NULL);
     uchar *hImgData = (uchar *)malloc(sz.width() * sz.height());
     ret = clEnqueueReadBuffer(gpuCmdQueue,imgData,CL_TRUE,0,imgSz,hImgData,0,NULL,NULL);
     clReleaseMemObject(gParms);
     clReleaseMemObject(imgData);
 
-    double ctime = QDateTime::currentDateTime().toMSecsSinceEpoch() - start;
-    ctime /= 1000;
+    double ctime = currentTime() - start;
+
     QImage px(hImgData,w,h,w,QImage::Format_Indexed8);
-    for (int i = 0; i < 255; i++)
+    px.setColor(0,qRgb(0,0,0));
+    for (int i = 1; i < 255; i++)
         px.setColor(i,qRgb(i,i,255-i));
 
     ui->fracImg->setPixmap(QPixmap::fromImage(px));
-    statusBar()->showMessage(QString("%1 seconds compute time").arg(ctime));
+    if (ctime > 0.75)
+    {
+        statusBar()->showMessage(QString("%1 seconds compute time").arg(ctime));
+    } else if (ctime > 0.01)
+    {
+        statusBar()->showMessage(QString("%1 ms compute time").arg(ctime * 1000.0));
+    } else {
+        statusBar()->showMessage(QString("%1 us compute time").arg(ctime * 1000000.0));
+    }
     ui->fracImg->repaint();
 }

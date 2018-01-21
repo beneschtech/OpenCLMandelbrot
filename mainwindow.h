@@ -25,6 +25,7 @@ private:
     cl_command_queue gpuCmdQueue;
     cl_context gpuCtx;
 
+    double currentTime();
     size_t gpuThreads;
     const char **gpuKernelSrc;
 
