@@ -25,6 +25,13 @@
            <enum>QLayout::SetDefaultConstraint</enum>
           </property>
           <item>
+           <widget class="QPushButton" name="stPB">
+            <property name="text">
+             <string>Single Thread</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QPushButton" name="cpuPB">
             <property name="text">
              <string>Compute with CPU</string>
@@ -83,7 +90,7 @@
      <x>0</x>
      <y>0</y>
      <width>928</width>
-     <height>22</height>
+     <height>23</height>
     </rect>
    </property>
    <widget class="QMenu" name="menuFile">

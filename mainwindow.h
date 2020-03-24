@@ -30,6 +30,7 @@ private:
     const char **gpuKernelSrc;
 
 private slots:
+    void stCompute();
     void cpuCompute();
     void gpuCompute();
 

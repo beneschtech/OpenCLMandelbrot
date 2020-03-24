@@ -23,6 +23,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->setupUi(this);
     connect(ui->cpuPB,SIGNAL(clicked(bool)),this,SLOT(cpuCompute()));
     connect(ui->gpuPB,SIGNAL(clicked(bool)),this,SLOT(gpuCompute()));
+    connect(ui->stPB,SIGNAL(clicked(bool)),this,SLOT(stCompute()));
 
     gpuKernelSrc = NULL;
     // Open CL portion
@@ -119,6 +120,40 @@ double MainWindow::currentTime()
     return rv;
 }
 
+void MainWindow::stCompute()
+{
+    ui->cpuPB->setChecked(true);
+    ui->gpuPB->setChecked(false);
+    int fw = ui->fracImg->frameWidth();
+    double start = currentTime();
+    QSize sz = ui->fracImg->size() - QSize(fw*2,fw*2);
+    uchar *imgData = (uchar *)malloc(sz.width() * sz.height());
+    int w = sz.width();
+    int h = sz.height();
+    QThreadPool::globalInstance()->start(new CPUFractalComputeThread(0,1,w,h,imgData));
+    while (QThreadPool::globalInstance()->activeThreadCount())
+        qApp->processEvents();
+
+    double ctime = currentTime() - start;
+
+    QImage px(imgData,w,h,w,QImage::Format_Indexed8);
+    px.setColor(0,qRgb(0,0,0));
+    for (int i = 1; i < 255; i++)
+        px.setColor(i,qRgb(i,i,255-i));
+
+    ui->fracImg->setPixmap(QPixmap::fromImage(px));
+    if (ctime > 0.75)
+    {
+        statusBar()->showMessage(QString("%1 seconds compute time").arg(ctime));
+    } else if (ctime > 0.01)
+    {
+        statusBar()->showMessage(QString("%1 ms compute time").arg(ctime * 1000.0));
+    } else {
+        statusBar()->showMessage(QString("%1 us compute time").arg(ctime * 1000000.0));
+    }
+    ui->fracImg->repaint();
+}
+
 void MainWindow::cpuCompute()
 {
     ui->cpuPB->setChecked(true);
@@ -164,7 +199,8 @@ void MainWindow::gpuCompute()
     QSize sz = ui->fracImg->size() - QSize(fw*2,fw*2);
     int w = sz.width();
     int h = sz.height();
-    double params[4];
+    size_t n_thr = sz.height() * sz.width();
+    float params[4];
     params[0] = left;
     params[1] = top;
     params[2] = fwidth;
@@ -178,7 +214,7 @@ void MainWindow::gpuCompute()
     clSetKernelArg(gpuKernel,2,sizeof(int),(void *)&h);
     clSetKernelArg(gpuKernel,3,sizeof(int),(void *)&iterations);
     clSetKernelArg(gpuKernel,4,sizeof(cl_mem),(void *)&imgData);
-    ret = clEnqueueNDRangeKernel(gpuCmdQueue,gpuKernel,1,NULL,&imgSz,NULL,0,NULL,NULL);
+    ret = clEnqueueNDRangeKernel(gpuCmdQueue,gpuKernel,1,NULL,&n_thr,NULL,0,NULL,NULL);
     uchar *hImgData = (uchar *)malloc(sz.width() * sz.height());
     ret = clEnqueueReadBuffer(gpuCmdQueue,imgData,CL_TRUE,0,imgSz,hImgData,0,NULL,NULL);
     clReleaseMemObject(gParms);
