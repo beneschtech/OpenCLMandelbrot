@@ -7,22 +7,26 @@
 QT       += core gui widgets
 CONFIG += c++11
 
-TARGET = cudafractal
 TEMPLATE = app
 
 
 SOURCES += \
+        gpucompute.cpp \
         main.cpp \
         mainwindow.cpp \
-    cpufractalcomputethread.cpp \
-    gpukernel.cpp
+        openmpcompute.cpp \
+        singlethreadcompute.cpp
 
 HEADERS += \
-        mainwindow.h \
-    cpufractalcomputethread.h
+        mainwindow.h
 
 FORMS += \
         mainwindow.ui
 
 LIBS += \
-    -lOpenCL
+    -lOpenCL -lgomp
+
+RESOURCES += \
+    opencl.qrc
+
+QMAKE_CXXFLAGS += -fopenmp
